@@ -17,7 +17,7 @@ class PatternSearch(object):
         self.__data=data
         # number of fourier series elements to be use during calculation
         self.__n=n
-        # min max numbers of data to look for
+        # min max numbers of setps to look for
         if n_min<0:
             self.__n_min=pattern.shape[0]
         else:
@@ -32,7 +32,7 @@ class PatternSearch(object):
 
 
 
-    # internal function to used , it checks in list matches
+    # internal function to be used during checking input data frame column names , it checks in list matches
     __compare = classmethod(lambda self,x, y: collections.Counter(x) == collections.Counter(y))
 
     # Setter for n
@@ -40,13 +40,13 @@ class PatternSearch(object):
         self.__n=n
         return
 
-    # Set if flags of not using a0 , constant/ scale element should be used
+    # Set if flags of not using a0 , if yes than mean of signal will be neglected
     def __SetScaleFlags(self,flags):
         toreturn_flags = {el:False for el in self.__pattern.columns} # by default we do not switch of scale
-        if type(flags) is bool:
+        if type(flags) is bool: # for  one bool everything will have the same value
             if flags :
                 toreturn_flags = {el:flags for el in self.__pattern.columns}
-        elif type(flags) is dict:
+        elif type(flags) is dict: # puts value from input dictionary
             for i in flags.keys():
                 if i in self.__pattern.columns:
                     toreturn_flags[i]=flags[i]
@@ -78,7 +78,7 @@ class PatternSearch(object):
             return False
         return True
 
-    # normalize data in different columns so data in each time series have the same weight
+    # normalize data so different columns with differnt scale weight the same
     # normalization is done to -1 1 value in pattern
     # those factor are use for data
     def __NormalizedPatternandData(self):
@@ -87,21 +87,21 @@ class PatternSearch(object):
         return scaler.transform(self.__pattern).transpose(), scaler.transform(self.__data).transpose()
 
 
-    #make this loop over the columns
     # Get Fourier series for one time series
     def __GetConf1D(self, f_values,noscaleflag):
         compelex_results=np.fft.rfft(f_values)/len(f_values)
         compelex_results*=2
-        if noscaleflag:
+        # a0 constant factor, mean value
+        if noscaleflag: # in case of no scale set to zero
             a0=0.0
         else:
-            a0=compelex_results[0].real/2.0 # constant factor
+            a0=compelex_results[0].real/2.0
         a=compelex_results[1:self.__n].real
         b=compelex_results[1:self.__n].imag*-1.0
         # returns 2n-1 array 0 is constant next n are cos terms last n are sin terms
         return  np.concatenate((np.full(1,a0),a,b))
 
-    # make on array for coefficient form all columns
+    # make on array of coefficient for all columns
     def __GetConf(self,df_values):
         return np.concatenate([self.__GetConf1D(df_values[i],self.__noScaleFlags[i]) for i in range(0,df_values.shape[0])])
 
@@ -109,9 +109,9 @@ class PatternSearch(object):
     def __CalculateDistance(self):
         # normalize Data
         patternNormalized,dataNormalized=self.__NormalizedPatternandData()
-        # pattern series
+        # pattern series fourier transfrom
         pattern_con=self.__GetConf(patternNormalized)
-        # get size of distance table all possible lengths of found pattern
+        # get size of distance table all possible lengths of found pattern and put -1 as initialization
         Npattern=patternNormalized.shape[1]
         Ndata=dataNormalized.shape[1]
         N1=Ndata-self.__n_min+1
@@ -131,8 +131,8 @@ class PatternSearch(object):
     # in case there is not enough patterns  less will be returned
     def __GetTopNScores(self,distance,Nscores):
         # fill all -1 (where we do not have data with value max+1)
-        # max+ value will be use as NAN value
-        # after finding matching part removes points which are close to avoid find only one part
+        # max + 1 value is used as NAN value
+        # after finding matching part removes points which are close to avoid find only one part with different lengthss
         max_v=int(distance.max())+1
         distance[distance==-1]=max_v
         # initial values
@@ -198,6 +198,7 @@ class PatternSearch(object):
        # bad data get out
        # if data calculations are not done
         if not self.__CheckData():
+            print("Problem with inputs lack of results")
             return list()
         # do calculations
         distance=  self.__CalculateDistance()

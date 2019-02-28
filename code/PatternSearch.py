@@ -116,20 +116,25 @@ class PatternSearch(object):
         Ndata=dataNormalized.shape[1]
         N1=Ndata-self.__n_min+1
         N2=self.__n_max-self.__n_min+1
-        distance=np.full([N1,N2],-1.0)
+        distance=np.full(N1,-1.0)
+        distance_length=np.full(N1,-1.0)
         #loop over all possible start points
         for i in range(N1):
             #loop over all possible lengths
+            tmp_distance=list()
             for j in range(self.__n_min,self.__n_max+1):
                 if i+j>Ndata:
                     break
                 tmp_conf=self.__GetConf(dataNormalized[:,i:i+j])
-                distance[i,j-self.__n_min]=np.sqrt(np.sum((tmp_conf-pattern_con)**2))
-        return distance
+                #distance[i,j-self.__n_min]=np.sqrt(np.sum((tmp_conf-pattern_con)**2))
+                tmp_distance.append(np.sqrt(np.sum((tmp_conf-pattern_con)**2)))
+            distance[i]=min(tmp_distance)
+            distance_length[i]=tmp_distance.index(distance[i])
+        return distance,distance_length
 
     # returns top N matched patterns
     # in case there is not enough patterns  less will be returned
-    def __GetTopNScores(self,distance,Nscores):
+    def __GetTopNScores(self,distance,distance_length,Nscores):
         # fill all -1 (where we do not have data with value max+1)
         # max + 1 value is used as NAN value
         # after finding matching part removes points which are close to avoid find only one part with different lengthss
@@ -139,19 +144,23 @@ class PatternSearch(object):
         min_v=distance.min()
         n_found=0
         results=list()
-        # number of neighbours to be remove
-        Ncut=int(self.__pattern.shape[0]*0.5)
+
 
         while (n_found<Nscores and min_v<max_v): # while we have not found everything and we still have valid data
             # find index of min
-            min_index=np.unravel_index(distance.argmin(), distance.shape)
+            min_index=distance.argmin()
             # pattern start and end
-            start_of_found_pattern=min_index[0]
-            end_of_found_pattern=min_index[0]+self.__n_min+min_index[1]
+            start_of_found_pattern=int(min_index)
+            end_of_found_pattern=int(min_index+distance_length[min_index]+self.__n_min)
+            #print(start_of_found_pattern)
+            #print(end_of_found_pattern)
+            #print(self.__data.shape)
             results.append((min_v,self.__data[start_of_found_pattern:end_of_found_pattern]))
             # cut the neighbour region
-            Nlow=max(0,min_index[0]-Ncut)
-            Nhigh=min(distance.shape[0],min_index[0]+Ncut)
+            # number of neighbours to be remove
+            Ncut=int((distance_length[min_index]+self.__n_min)*0.5)
+            Nlow=max(0,min_index-Ncut)
+            Nhigh=min(distance.shape[0],min_index+Ncut)
             distance[Nlow:Nhigh,]=max_v
             # get values for next step
             n_found=n_found+1
@@ -201,8 +210,8 @@ class PatternSearch(object):
             print("Problem with inputs lack of results")
             return list()
         # do calculations
-        distance=  self.__CalculateDistance()
-        results=self.__GetTopNScores(distance,Nscores)
+        distance,distance_length=  self.__CalculateDistance()
+        results=self.__GetTopNScores(distance,distance_length,Nscores)
         if plot:
            self.PlotResults(results)
         return results
